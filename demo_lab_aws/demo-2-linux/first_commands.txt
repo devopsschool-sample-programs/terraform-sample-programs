@@ -1,0 +1,8 @@
+This will create a new file
+$ssh-keygen -f final
+
+final && final.pub
+
+or Copy AWS ONE in the currently directory
+final && final.pub
+

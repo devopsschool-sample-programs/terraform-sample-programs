@@ -1,0 +1,83 @@
+provider.tf
+===========================================
+provider "aws" {
+    access_key = "${var.AWS_ACCESS_KEY}"
+    secret_key = "${var.AWS_SECRET_KEY}"
+    region = "${var.AWS_REGION}"
+}
+
+
+windows-instance.tf
+===========================================
+resource "aws_key_pair" "mykey" {
+  key_name = "mykey"
+  public_key = "${file("${var.PATH_TO_PUBLIC_KEY}")}"
+}
+
+resource "aws_instance" "win-example" {
+  ami = "${lookup(var.WIN_AMIS, var.AWS_REGION)}"
+  instance_type = "t2.micro"
+  key_name = "${aws_key_pair.mykey.key_name}"
+  user_data = <<EOF
+<powershell>
+net user ${var.INSTANCE_USERNAME} '${var.INSTANCE_PASSWORD}' /add /y
+net localgroup administrators ${var.INSTANCE_USERNAME} /add
+
+winrm quickconfig -q
+winrm set winrm/config/winrs '@{MaxMemoryPerShellMB="300"}'
+winrm set winrm/config '@{MaxTimeoutms="1800000"}'
+winrm set winrm/config/service '@{AllowUnencrypted="true"}'
+winrm set winrm/config/service/auth '@{Basic="true"}'
+
+netsh advfirewall firewall add rule name="WinRM 5985" protocol=TCP dir=in localport=5985 action=allow
+netsh advfirewall firewall add rule name="WinRM 5986" protocol=TCP dir=in localport=5986 action=allow
+
+net stop winrm
+sc.exe config winrm start=auto
+net start winrm
+</powershell>
+EOF
+
+  provisioner "file" {
+    source = "test.txt"
+    destination = "C:/test.txt"
+  }
+  connection {
+    type = "winrm"
+    timeout = "10m"
+    user = "${var.INSTANCE_USERNAME}"
+    password = "${var.INSTANCE_PASSWORD}"
+  }
+}
+
+test.txt
+============================
+This is a test.txt that contains some text
+
+vars.tf
+===============================
+variable "AWS_ACCESS_KEY" {}
+variable "AWS_SECRET_KEY" {}
+variable "AWS_REGION" {
+  default = "eu-west-1"
+}
+variable "WIN_AMIS" {
+  type = "map"
+  default = {
+    us-east-1 = "ami-30540427"
+    us-west-2 = "ami-9f5efbff"
+    eu-west-1 = "ami-7ac78809"
+  }
+}
+
+variable "PATH_TO_PRIVATE_KEY" {
+  default = "mykey"
+}
+variable "PATH_TO_PUBLIC_KEY" {
+  default = "mykey.pub"
+}
+variable "INSTANCE_USERNAME" {
+  default = "Terraform"
+}
+variable "INSTANCE_PASSWORD" { }
+
